@@ -1,0 +1,44 @@
+services:
+  traefik:
+    image: traefik
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.file.filename=/traefik_dynamic_conf.yml"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+    ports:
+      - "80:80"      # HTTP трафик
+      - "443:443"    # HTTPS трафик
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./traefik_dynamic_conf.yml:/traefik_dynamic_conf.yml"
+      - "../certs/example.localhost.pem:/certs/example.localhost.pem"
+      - "../certs/example.localhost-key.pem:/certs/example.localhost-key.pem"
+    networks:
+      - web
+
+  jenkins:
+    build: ./jenkins
+    user: root
+    environment:
+      JAVA_OPTS: -Djenkins.install.runSetupWizard=false
+      JENKINS_OPTS: --prefix=/jenkins --argumentsRealm.roles.user=admin --argumentsRealm.passwd.admin=admin --argumentsRealm.roles.admin=admin
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.jenkins.tls=true"
+      - "traefik.http.routers.jenkins.entrypoints=websecure"
+      - "traefik.http.routers.jenkins.rule=Host(`example.localhost`) && PathPrefix(`/jenkins`)"
+      - "traefik.http.services.jenkins.loadbalancer.server.port=8080"
+    networks:
+      - web
+
+volumes:
+  jenkins_home:
+
+networks:
+  web:
+    driver: bridge
